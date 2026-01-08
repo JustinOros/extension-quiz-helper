@@ -1,6 +1,6 @@
 # 🎓 Quiz Helper - AI-Powered Quiz Assistant
 
-An intelligent Chrome extension that uses ChatGPT to help you with online quizzes by displaying helpful hint bubbles with [somewhat] correct answers.
+This Chrome web browser extension uses AI to help you with online quizzes by highlighting [somewhat] correct answers.
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
