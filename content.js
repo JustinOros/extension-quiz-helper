@@ -12,16 +12,10 @@ function injectCustomStyles() {
   style.id = 'quiz-helper-styles';
   style.textContent = `
     .quiz-helper-correct {
-      background-color: #90EE90 !important;
       border: 3px solid #28a745 !important;
-      box-shadow: 0 0 10px rgba(40, 167, 69, 0.6) !important;
-      padding: 8px !important;
+      box-shadow: 0 0 8px rgba(40, 167, 69, 0.5) !important;
       border-radius: 4px !important;
       transition: all 0.3s ease !important;
-    }
-    
-    .quiz-helper-correct * {
-      background-color: transparent !important;
     }
   `;
   document.head.appendChild(style);
@@ -272,22 +266,17 @@ function findQuestions() {
   return questions;
 }
 
-// Enhanced answer choice finding
+// Enhanced answer choice finding - strictly finds only radio/checkbox options
 function findAnswerChoices(questionElement) {
   const answers = [];
   const seenTexts = new Set();
   let inputType = null;
   
-  let container = questionElement.closest('[role="group"], fieldset, form, [class*="question"], [class*="answer"], [class*="option"], div');
-  
-  if (!container || container === questionElement) {
-    container = questionElement.parentElement;
-  }
-  
-  for (let i = 0; i < 4 && container; i++) {
-    const inputsInContainer = container.querySelectorAll('input[type="radio"], input[type="checkbox"]');
-    if (inputsInContainer.length > 0) {
-      console.log(`   Found ${inputsInContainer.length} inputs at level ${i}`);
+  // Find the container with radio/checkbox inputs
+  let container = questionElement;
+  for (let i = 0; i < 6 && container; i++) {
+    const inputs = container.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+    if (inputs.length > 0) {
       break;
     }
     container = container.parentElement;
@@ -295,93 +284,66 @@ function findAnswerChoices(questionElement) {
   
   if (!container) container = document.body;
   
-  let nextSibling = questionElement.nextElementSibling;
-  let siblingAttempts = 0;
-  const siblingContainers = [container];
+  // Get all radio/checkbox inputs - these are the ONLY valid answer choices
+  const inputs = container.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+  console.log(`   Found ${inputs.length} radio/checkbox inputs`);
   
-  while (nextSibling && siblingAttempts < 8) {
-    siblingContainers.push(nextSibling);
-    nextSibling = nextSibling.nextElementSibling;
-    siblingAttempts++;
-  }
-  
-  const answerSelectors = [
-    'input[type="radio"]',
-    'input[type="checkbox"]',
-    'button[role="radio"]',
-    'button[role="checkbox"]',
-    '[role="option"]',
-    '[class*="answer"]',
-    '[class*="option"]',
-    '[class*="choice"]',
-    '[data-test*="answer"]',
-    '[data-test*="option"]',
-    'label',
-    'li'
-  ];
-  
-  const excludePatterns = [
-    /^question\s+\d+\s+of\s+\d+$/i,
-    /^page\s+\d+/i,
-    /^(next|previous|submit|skip|back|continue|finish|review)$/i,
-    /^\d+\s*\/\s*\d+$/,
-    /^score:/i,
-    /^time:/i,
-    /^remaining:/i,
-    /^points?:/i
-  ];
-  
-  siblingContainers.forEach(searchContainer => {
-    answerSelectors.forEach(selector => {
-      const elements = searchContainer.querySelectorAll(selector);
-      
-      elements.forEach(el => {
-        let text = el.textContent.trim();
-        
-        if (el.tagName === 'INPUT') {
-          if (el.type === 'radio') {
-            inputType = 'radio';
-          } else if (el.type === 'checkbox') {
-            inputType = 'checkbox';
-          }
-          
-          const label = searchContainer.querySelector(`label[for="${el.id}"]`);
-          if (label) {
-            text = label.textContent.trim();
-          } else {
-            const parentLabel = el.closest('label');
-            if (parentLabel) {
-              text = parentLabel.textContent.trim();
-            } else {
-              const parent = el.parentElement;
-              if (parent) {
-                text = parent.textContent.trim();
-              }
-            }
-          }
-        }
-        
-        if (!text || text.length < 2 || text.length > 800 || seenTexts.has(text)) {
-          return;
-        }
-        
-        if (excludePatterns.some(pattern => pattern.test(text))) {
-          return;
-        }
-        
-        const wordCount = text.split(/\s+/).length;
-        const numberCount = (text.match(/\d+/g) || []).length;
-        if (wordCount > 2 && numberCount > wordCount / 2) {
-          return;
-        }
-        
-        seenTexts.add(text);
-        answers.push({
-          text: text,
-          element: el,
-          parentLabel: el.closest('label') || el
-        });
-      });
+  inputs.forEach((input, idx) => {
+    if (input.type === 'radio') inputType = 'radio';
+    else if (input.type === 'checkbox') inputType = 'checkbox';
+    
+    let text = '';
+    let labelElement = null;
+    
+    // Strategy 1: Find label with matching 'for' attribute
+    if (input.id) {
+      labelElement = document.querySelector(`label[for="${input.id}"]`);
+      if (labelElement) {
+        text = labelElement.textContent.trim();
+      }
+    }
+    
+    // Strategy 2: Find parent label
+    if (!text) {
+      labelElement = input.closest('label');
+      if (labelElement) {
+        text = labelElement.textContent.trim();
+      }
+    }
+    
+    // Strategy 3: Find adjacent sibling text
+    if (!text) {
+      const parent = input.parentElement;
+      if (parent) {
+        // Clone and remove the input to get just the text
+        const clone = parent.cloneNode(true);
+        const inputClone = clone.querySelector('input');
+        if (inputClone) inputClone.remove();
+        text = clone.textContent.trim();
+      }
+    }
+    
+    // Strategy 4: Check next sibling
+    if (!text && input.nextSibling) {
+      text = input.nextSibling.textContent?.trim() || '';
+    }
+    
+    // Skip if no text found or duplicate
+    if (!text || text.length < 1) {
+      console.log(`   Skipping input ${idx} - no text found`);
+      return;
+    }
+    
+    if (seenTexts.has(text)) {
+      console.log(`   Skipping input ${idx} - duplicate text`);
+      return;
+    }
+    
+    seenTexts.add(text);
+    answers.push({
+      text: text,
+      element: input,
+      parentLabel: labelElement || input.parentElement
     });
   });
   
@@ -516,7 +478,7 @@ ANALYSIS STEPS:
 
 Think carefully and provide your answer.
 
-FORMAT: Respond with only "ANSWER: " followed by the letter(s) separated by commas (e.g., "ANSWER: B" or "ANSWER: A,C,D")`;
+FORMAT: Always respond with "ANSWER: " followed by the LETTER(s) of the correct option(s) (A, B, C, D, etc.), separated by commas if multiple. Never respond with numbers - always use letters to indicate which option is correct.`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
