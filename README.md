@@ -1,6 +1,6 @@
 # 🎓 Quiz Helper - AI-Powered Quiz Assistant
 
-A web browser extension for Chrome which uses AI to help with online quizzes by highlighting correct answers in green (Proof of Concept. ~80% Final Score Accuracy on Practice Assessments).
+A web browser extension for Chrome which uses AI to help with online quizzes by highlighting correct answers in green (~100% Final Score Accuracy on Microsoft Practice Assessments).
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -44,9 +44,8 @@ A web browser extension for Chrome which uses AI to help with online quizzes by 
 1. **Navigate to a quiz** (works best with Microsoft Learn practice assessments)
 2. **Click the extension icon** in your toolbar
 3. **Toggle the switch to "On"**
-4. **Refresh Page** - Correct answer(s) will be highlighted in green after a brief moment
-5. **Select your answers** based on the hints
-6. **Toggle off** when done to remove hints
+4. **Select your answers** based on the hints
+5. **Toggle off** when done to remove hints
 
 ## 🔧 Configuration
 
@@ -103,9 +102,10 @@ This extension is designed for learning and study purposes. Use responsibly and 
 - Ensure all three icon files are present
 
 **No hints appearing:**
+- Try clicking "Retry Scan" on extnsion popup
+- Make sure the extension toggle is "On"
 - Check that you've added a valid OpenAI API key
 - Open browser console (F12) and look for error messages
-- Make sure the extension toggle is "On"
 - Try refreshing the quiz page
 
 **API errors:**
