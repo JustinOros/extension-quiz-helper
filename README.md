@@ -59,17 +59,6 @@ The extension requires an OpenAI API key to function. To get one:
 4. Copy the key (starts with `sk-...`)
 5. Paste it in the extension popup
 
-**Note**: New OpenAI accounts get $5 in free credits!
-
-## 💰 Costs
-
-- Model used: `gpt-3.5-turbo`
-- Cost per question: ~$0.001-0.002 (1/10th of a penny)
-- 50 questions: ~$0.05-0.10
-- 100 questions: ~$0.10-0.20
-
-Very affordable for exam preparation!
-
 ## 🛠️ Technical Details
 
 ### How It Works
@@ -78,7 +67,7 @@ Very affordable for exam preparation!
 2. **Answer Identification**: Finds associated answer choices (radio buttons, checkboxes)
 3. **Smart Prompting**: Sends the question and answer choices to ChatGPT
 4. **Response Matching**: Matches ChatGPT's response to actual answer text
-5. **Hint Display**: Shows a styled hint bubble with the correct answer(s)
+5. **Hint Display**: Highlights correct answer(s) in green
 
 ### Files Structure
 
