@@ -23,19 +23,6 @@ function injectCustomStyles() {
     .quiz-helper-correct * {
       background-color: transparent !important;
     }
-    
-    .quiz-helper-unknown {
-      background-color: #FFB6C1 !important;
-      border: 3px solid #dc3545 !important;
-      box-shadow: 0 0 10px rgba(220, 53, 69, 0.6) !important;
-      padding: 8px !important;
-      border-radius: 4px !important;
-      transition: all 0.3s ease !important;
-    }
-    
-    .quiz-helper-unknown * {
-      background-color: transparent !important;
-    }
   `;
   document.head.appendChild(style);
   styleInjected = true;
@@ -87,24 +74,17 @@ function waitForContentAndScan() {
   console.log('🔍 Waiting for Microsoft Learn quiz content to load...');
   
   let attempts = 0;
-  const maxAttempts = 60; // Increased for slower loading
+  const maxAttempts = 60;
   
   const checkContent = setInterval(() => {
     attempts++;
     
-    // Microsoft Learn specific selectors
     const mainColumn = document.querySelector('[data-main-column]');
     const hasMainContent = mainColumn && mainColumn.innerText.length > 100;
-    
-    // Look for Microsoft Learn quiz elements
     const hasQuizElements = document.querySelectorAll('input[type="radio"], input[type="checkbox"]').length > 0;
     const hasQuestionText = document.body.innerText.length > 500;
-    
-    // Look for common Microsoft Learn assessment structures
     const hasAssessmentContainer = document.querySelector('[class*="assessment"], [class*="question"], [role="group"]');
     const hasInteractiveElements = document.querySelectorAll('button, input, label').length > 5;
-    
-    // Check for React root (Microsoft Learn uses React)
     const reactRoot = document.querySelector('#root, [data-reactroot], [data-react-app]');
     const hasReactContent = reactRoot && reactRoot.innerText.length > 200;
     
@@ -112,7 +92,7 @@ function waitForContentAndScan() {
                          (hasQuestionText && hasQuizElements) ||
                          (hasReactContent && hasQuizElements);
     
-    console.log(`Attempt ${attempts}/${maxAttempts}: main=${hasMainContent}, quiz=${hasQuizElements}, assessment=${!!hasAssessmentContainer}, react=${hasReactContent}`);
+    console.log(`Attempt ${attempts}/${maxAttempts}: main=${hasMainContent}, quiz=${hasQuizElements}, react=${hasReactContent}`);
     
     if (contentLoaded) {
       clearInterval(checkContent);
@@ -121,27 +101,38 @@ function waitForContentAndScan() {
     } else if (attempts >= maxAttempts) {
       clearInterval(checkContent);
       console.log('⚠️ Timeout: Quiz content did not load within expected time.');
-      console.log('💡 Try: 1) Refresh the page, 2) Wait for quiz to fully load, 3) Click "Start" if needed');
     }
   }, 500);
 }
 
+// Function to clean and extract pure question text
+function cleanQuestionText(text) {
+  // Remove common prefixes that don't add value
+  let cleaned = text
+    .replace(/^Question \d+\s*[:.]?\s*/i, '')
+    .replace(/^\d+\.\s*/, '')
+    .replace(/^Q\d+\s*[:.]?\s*/i, '')
+    .trim();
+  
+  return cleaned;
+}
+
 // Function to get full question context including scenario descriptions
 function getFullQuestionContext(questionElement) {
-  let fullText = questionElement.textContent.trim();
+  let questionText = questionElement.textContent.trim();
+  questionText = cleanQuestionText(questionText);
+  
+  const contextParts = [];
   
   // Check previous siblings for context (scenario descriptions, requirements)
   let prevSibling = questionElement.previousElementSibling;
   let attempts = 0;
-  const contextParts = [];
   
   while (prevSibling && attempts < 5) {
     const text = prevSibling.textContent.trim();
     
-    // If it's a substantial paragraph that adds context
     if (text.length > 30 && text.length < 2000 && !text.match(/question \d+|^\d+\s*of\s*\d+/i)) {
-      // Check if it looks like contextual information
-      const hasContextKeywords = /scenario|requirement|company|organization|need|must|should|environment|architecture|implement|deploy|configure|planning|contoso|fabrikam|adatum/i.test(text);
+      const hasContextKeywords = /scenario|requirement|company|organization|need|must|should|environment|architecture|implement|deploy|configure|planning|contoso|fabrikam|adatum|you have|you are|you plan|you create/i.test(text);
       
       if (hasContextKeywords || text.length > 100) {
         contextParts.unshift(text);
@@ -152,14 +143,13 @@ function getFullQuestionContext(questionElement) {
     attempts++;
   }
   
-  // Also check parent containers for context
+  // Check parent containers for broader context
   let parent = questionElement.parentElement;
   attempts = 0;
   while (parent && attempts < 3) {
     const parentText = parent.textContent.trim();
-    if (parentText.length > fullText.length + 50 && parentText.length < 3000) {
-      // This parent might have additional context
-      const extraContext = parentText.replace(fullText, '').trim();
+    if (parentText.length > questionText.length + 50 && parentText.length < 3000) {
+      const extraContext = parentText.replace(questionText, '').trim();
       if (extraContext.length > 50 && /scenario|requirement|company|organization/i.test(extraContext)) {
         contextParts.unshift(extraContext.substring(0, 500));
         break;
@@ -170,11 +160,12 @@ function getFullQuestionContext(questionElement) {
   }
   
   if (contextParts.length > 0) {
-    fullText = contextParts.join('\n\n') + '\n\n' + fullText;
+    const fullContext = contextParts.join('\n\n') + '\n\n' + questionText;
     console.log('📋 Added context from surrounding elements');
+    return fullContext;
   }
   
-  return fullText;
+  return questionText;
 }
 
 // Enhanced question finding for Microsoft Learn
@@ -183,113 +174,108 @@ function findQuestions() {
   const seenTexts = new Set();
   
   console.log('🔍 Scanning page structure...');
-  console.log('   Total page text length:', document.body.innerText.length);
   
-  // Microsoft Learn specific selectors (prioritized)
-  const microsoftLearnSelectors = [
+  // Look for question CONTAINERS first, not individual text elements
+  const containerSelectors = [
     '[role="group"]',
+    '[class*="question-container"]',
+    '[class*="question-block"]',
     '[class*="assessment"]',
-    '[class*="question"]',
-    '[data-test*="question"]',
     'fieldset',
-    'form'
+    '[data-test*="question"]'
   ];
   
-  // Generic selectors as fallback
-  const genericSelectors = [
-    'h1, h2, h3, h4, h5, h6',
-    'p',
-    'div[class*="text"]',
-    'div[class*="content"]',
-    'div',
-    'span',
-    'label'
-  ];
-  
-  const allSelectors = [...microsoftLearnSelectors, ...genericSelectors];
-  
-  const questionPatterns = [
-    /\?$/,                                    // Ends with question mark
-    /\?\s*$/,                                 // Ends with question mark and whitespace
-    /^(what|when|where|who|why|how|which|is|are|does|do|did|can|could|would|should|will|shall|must)/i,
-    /you need to/i,
-    /which of the following/i,
-    /select.*correct/i,
-    /choose.*answer/i,
-    /characteristics/i,
-    /deployment model/i,
-    /recommend/i,
-    /solution/i,
-    /ensure that/i,
-    /minimize/i,
-    /configure/i,
-    /implement/i
-  ];
-  
-  allSelectors.forEach(selector => {
-    const elements = document.querySelectorAll(selector);
+  // Try to find question containers that hold the full multi-line question
+  for (const selector of containerSelectors) {
+    const containers = document.querySelectorAll(selector);
     
-    elements.forEach(el => {
-      const text = el.textContent.trim();
+    containers.forEach(container => {
+      // Get ALL text content from the container as ONE question
+      const inputs = container.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+      if (inputs.length === 0) return; // Skip if no answer choices
       
-      // Skip very short or very long text, or duplicates
-      if (text.length < 15 || text.length > 1500 || seenTexts.has(text)) {
-        return;
-      }
+      // Find the question text part (everything before the answer choices)
+      let questionText = '';
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+      let node;
+      const answerContainer = inputs[0].closest('label, [class*="answer"], [class*="option"]')?.parentElement;
       
-      // Skip elements that are likely navigation or UI
-      if (/^(next|previous|submit|skip|back|continue|finish|review|question \d+ of \d+)$/i.test(text)) {
-        return;
-      }
-      
-      // Check against question patterns
-      for (const pattern of questionPatterns) {
-        if (pattern.test(text)) {
-          seenTexts.add(text);
-          questions.push({
-            text: text,
-            element: el
-          });
-          console.log('✓ Found question:', text.substring(0, 120) + '...');
-          break;
+      while (node = walker.nextNode()) {
+        const parent = node.parentElement;
+        // Stop collecting text once we hit the answers section
+        if (answerContainer && answerContainer.contains(parent)) continue;
+        if (parent.closest('label[for], [class*="answer"], [class*="option"]')) continue;
+        
+        const text = node.textContent.trim();
+        if (text.length > 2) {
+          questionText += text + ' ';
         }
       }
+      
+      questionText = questionText.trim();
+      
+      if (questionText.length < 15 || seenTexts.has(questionText)) return;
+      if (/^(next|previous|submit|skip)$/i.test(questionText)) return;
+      
+      seenTexts.add(questionText);
+      questions.push({
+        text: cleanQuestionText(questionText),
+        element: container
+      });
+      console.log('✓ Found question:', questionText.substring(0, 120) + '...');
     });
-  });
+  }
   
-  // Debug logging if no questions found
+  // Fallback: if no containers found, group by proximity to radio/checkbox inputs
   if (questions.length === 0) {
-    console.log('⚠️ No questions detected. Debugging page structure...');
-    console.log('   Main column:', document.querySelector('[data-main-column]')?.innerText.substring(0, 200));
-    console.log('   Input elements:', document.querySelectorAll('input').length);
-    console.log('   Radio/Checkbox:', document.querySelectorAll('input[type="radio"], input[type="checkbox"]').length);
+    const inputs = document.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+    const processedContainers = new Set();
     
-    const allText = document.body.innerText;
-    const lines = allText.split('\n').filter(l => l.trim().length > 20);
-    console.log('   First 10 substantial text lines:');
-    lines.slice(0, 10).forEach((line, i) => {
-      console.log(`     ${i + 1}. ${line.substring(0, 100)}`);
+    inputs.forEach(input => {
+      let container = input.closest('[role="group"], fieldset, form, [class*="question"]');
+      if (!container) container = input.parentElement?.parentElement?.parentElement;
+      if (!container || processedContainers.has(container)) return;
+      
+      processedContainers.add(container);
+      
+      // Collect all non-answer text as the question
+      let questionText = '';
+      const textElements = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div, span');
+      
+      textElements.forEach(el => {
+        if (el.closest('label') || el.querySelector('input')) return;
+        const text = el.textContent.trim();
+        if (text.length > 10 && !seenTexts.has(text)) {
+          questionText += text + ' ';
+        }
+      });
+      
+      questionText = questionText.trim();
+      if (questionText.length > 15 && !seenTexts.has(questionText)) {
+        seenTexts.add(questionText);
+        questions.push({
+          text: cleanQuestionText(questionText),
+          element: container
+        });
+      }
     });
   }
   
   return questions;
 }
 
-// Enhanced answer choice finding for Microsoft Learn
+// Enhanced answer choice finding
 function findAnswerChoices(questionElement) {
   const answers = [];
   const seenTexts = new Set();
   let inputType = null;
   
-  // Start with the question element's container
   let container = questionElement.closest('[role="group"], fieldset, form, [class*="question"], [class*="answer"], [class*="option"], div');
   
-  // Expand search scope if needed
   if (!container || container === questionElement) {
     container = questionElement.parentElement;
   }
   
-  // Search up to 4 levels if we haven't found inputs yet
   for (let i = 0; i < 4 && container; i++) {
     const inputsInContainer = container.querySelectorAll('input[type="radio"], input[type="checkbox"]');
     if (inputsInContainer.length > 0) {
@@ -301,7 +287,6 @@ function findAnswerChoices(questionElement) {
   
   if (!container) container = document.body;
   
-  // Also check siblings
   let nextSibling = questionElement.nextElementSibling;
   let siblingAttempts = 0;
   const siblingContainers = [container];
@@ -345,7 +330,6 @@ function findAnswerChoices(questionElement) {
       elements.forEach(el => {
         let text = el.textContent.trim();
         
-        // Handle input elements specially
         if (el.tagName === 'INPUT') {
           if (el.type === 'radio') {
             inputType = 'radio';
@@ -353,7 +337,6 @@ function findAnswerChoices(questionElement) {
             inputType = 'checkbox';
           }
           
-          // Find associated label
           const label = searchContainer.querySelector(`label[for="${el.id}"]`);
           if (label) {
             text = label.textContent.trim();
@@ -362,7 +345,6 @@ function findAnswerChoices(questionElement) {
             if (parentLabel) {
               text = parentLabel.textContent.trim();
             } else {
-              // Try to find text near the input
               const parent = el.parentElement;
               if (parent) {
                 text = parent.textContent.trim();
@@ -371,7 +353,6 @@ function findAnswerChoices(questionElement) {
           }
         }
         
-        // Validation checks
         if (!text || text.length < 2 || text.length > 800 || seenTexts.has(text)) {
           return;
         }
@@ -380,7 +361,6 @@ function findAnswerChoices(questionElement) {
           return;
         }
         
-        // Exclude if too many numbers (likely not answer text)
         const wordCount = text.split(/\s+/).length;
         const numberCount = (text.match(/\d+/g) || []).length;
         if (wordCount > 2 && numberCount > wordCount / 2) {
@@ -454,7 +434,7 @@ function getExpectedAnswerCount(questionText, inputType) {
   return -1;
 }
 
-// Enhanced OpenAI call with better prompting
+// ENHANCED OpenAI call with improved prompting and reasoning
 async function getAnswerFromOpenAI(question, answerChoices, inputType, expectedCount) {
   if (!openaiApiKey) {
     console.error('❌ No API key available');
@@ -462,68 +442,73 @@ async function getAnswerFromOpenAI(question, answerChoices, inputType, expectedC
   }
   
   try {
-    console.log('🤖 Querying GPT-4o...');
+    console.log('🤖 Querying GPT-4o with enhanced prompt...');
     
     const choicesText = answerChoices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c.text}`).join('\n');
     
     let instructions = '';
+    let answerCount = '';
+    
     if (inputType === 'radio') {
-      instructions = `CRITICAL: This is a SINGLE-ANSWER question (radio buttons).
-- You MUST select EXACTLY ONE option
-- Even if multiple seem correct, choose the MOST correct one
-- Provide only ONE letter in your answer`;
+      instructions = `This is a SINGLE-ANSWER question (radio buttons).`;
+      answerCount = 'You MUST select EXACTLY ONE option.';
     } else if (expectedCount > 0) {
-      instructions = `CRITICAL: This is a MULTIPLE-ANSWER question requiring EXACTLY ${expectedCount} answer(s).
-- You MUST select EXACTLY ${expectedCount} option(s), no more, no less
-- Evaluate each option independently
-- Provide exactly ${expectedCount} letter(s) separated by commas`;
+      instructions = `This is a MULTIPLE-ANSWER question requiring EXACTLY ${expectedCount} answer(s).`;
+      answerCount = `You MUST select EXACTLY ${expectedCount} option(s), no more, no less.`;
     } else if (expectedCount === -1) {
-      instructions = `CRITICAL: This is a "SELECT ALL THAT APPLY" question.
-- Carefully evaluate EACH option independently
-- Include ALL options that are correct (commonly 2-4 options)
-- It's better to include a correct answer than to miss one
-- Provide all correct letters separated by commas`;
+      instructions = `This is a "SELECT ALL THAT APPLY" question.`;
+      answerCount = 'Select ALL correct options. There are typically 2-4 correct answers.';
     }
     
-    const systemPrompt = `You are a Microsoft Azure certification expert with deep knowledge of:
-- Azure core services (Compute, Storage, Networking, Databases)
-- Azure identity and access management (Entra ID, RBAC)
-- Azure governance and compliance (Policy, Blueprints, Cost Management)
-- Azure security (Security Center, Sentinel, Key Vault)
-- Azure monitoring (Monitor, Log Analytics, Application Insights)
-- Azure architecture patterns and best practices
-- Real-world Azure implementation and troubleshooting
+    // ENHANCED system prompt with more specific Azure knowledge
+    const systemPrompt = `You are a Microsoft Azure expert preparing someone for Azure certification exams. You have deep, practical knowledge of:
 
-Your expertise comes from years of hands-on Azure experience and Microsoft certification training.
+AZURE FUNDAMENTALS (AZ-900):
+- Cloud concepts: IaaS, PaaS, SaaS, public/private/hybrid cloud
+- Core Azure services: Compute (VMs, App Service, Functions, AKS), Storage (Blob, Files, Disk, Archive), Networking (VNet, VPN, ExpressRoute), Databases (SQL DB, Cosmos DB)
+- Azure management: Portal, CLI, PowerShell, ARM templates, Azure Resource Manager
+- Security: Azure AD/Entra ID, RBAC, MFA, Security Center, Key Vault, NSGs
+- Pricing: Subscriptions, resource groups, cost management, TCO calculator, pricing calculator
+- Governance: Azure Policy, Blueprints, Management Groups, Tags
+- Compliance: Trust Center, compliance offerings, data residency
+
+DECISION PRINCIPLES:
+1. Microsoft ALWAYS recommends PaaS over IaaS when possible (more managed, less overhead)
+2. For serverless: Azure Functions > Logic Apps for code-based logic
+3. For storage: Blob for unstructured data, Azure Files for SMB shares, Disk for VMs
+4. For databases: SQL Database for relational, Cosmos DB for globally distributed NoSQL
+5. For identity: Azure AD/Entra ID is the central identity service
+6. For security: Defense in depth - use multiple layers (NSG, firewalls, encryption)
+7. For cost optimization: Reserved instances, spot VMs, auto-scaling, Azure Advisor recommendations
+8. For high availability: Availability Zones > Availability Sets > single VMs
+9. For hybrid: ExpressRoute > VPN for predictable performance and higher bandwidth
+10. For compliance: Choose regions based on data residency requirements
 
 When answering:
-1. Consider Microsoft's official recommendations and best practices
-2. Think about the Azure Well-Architected Framework (cost, security, reliability, performance, operations)
-3. For scenario questions, identify key requirements, constraints, and priorities
-4. Choose the MOST Azure-native and recommended solution
-5. If multiple answers seem viable, pick the one Microsoft would recommend in their official docs
+- Consider the Well-Architected Framework: Cost Optimization, Operational Excellence, Performance Efficiency, Reliability, Security
+- Think about what Microsoft would recommend in official documentation
+- For "select all" questions, be thorough - multiple answers are usually correct
+- Pay attention to key words: "cheapest" = lower tier, "most secure" = multiple layers, "fastest" = premium tiers`;
 
-Example:
-Q: Which Azure service provides serverless compute?
-Options: A. Azure Virtual Machines B. Azure Functions C. Azure App Service D. Azure Batch
-Analysis: Looking for serverless - Azure Functions is the correct answer as it's fully serverless (no VM management)
-Answer: B`;
+    const userPrompt = `${instructions}
+${answerCount}
 
-    const userPrompt = `Question:
+QUESTION:
 ${question}
 
-Options:
+OPTIONS:
 ${choicesText}
 
-${instructions}
+ANALYSIS STEPS:
+1. Identify the core requirement (cost, security, performance, compliance, etc.)
+2. Eliminate obviously wrong answers
+3. Consider Microsoft best practices and official recommendations
+4. For each remaining option, evaluate against Azure principles
+5. Choose the answer(s) that Microsoft would recommend
 
-Think step-by-step:
-1. Identify what the question is really asking
-2. Consider Azure best practices and official guidance
-3. Evaluate each option against the requirements
-4. Choose the answer(s) that Microsoft would recommend
+Think carefully and provide your answer.
 
-Format: ANSWER: [letter(s) only - e.g., "B" or "A,C,D"]`;
+FORMAT: Respond with only "ANSWER: " followed by the letter(s) separated by commas (e.g., "ANSWER: B" or "ANSWER: A,C,D")`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -537,8 +522,9 @@ Format: ANSWER: [letter(s) only - e.g., "B" or "A,C,D"]`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.3,
-        max_tokens: 600
+        temperature: 0.2,  // Lowered for more consistent, confident answers
+        max_tokens: 800,
+        top_p: 0.95  // Added for better quality
       })
     });
     
@@ -551,17 +537,20 @@ Format: ANSWER: [letter(s) only - e.g., "B" or "A,C,D"]`;
     const data = await response.json();
     const fullResponse = data.choices[0].message.content.trim();
     
-    console.log('🤖 GPT-4o response:', fullResponse.substring(0, 300));
+    console.log('🤖 GPT-4o response:', fullResponse.substring(0, 400));
     
-    // Extract answer
+    // Extract answer with multiple strategies
     let answer = null;
+    
+    // Strategy 1: Look for "ANSWER:" format
     const answerMatch = fullResponse.match(/ANSWER:\s*([A-Z](?:,\s*[A-Z])*)/i);
     if (answerMatch) {
       answer = answerMatch[1];
     } else {
-      // Fallback extraction
+      // Strategy 2: Look for common answer patterns
       const patterns = [
         /(?:correct|answer|select).*?:\s*([A-Z](?:,\s*[A-Z])*)/i,
+        /(?:therefore|thus|so).*?([A-Z](?:,\s*[A-Z])*)\s*$/i,
         /\b([A-Z](?:,\s*[A-Z])*)\s*$/,
         /\b([A-Z](?:,\s*[A-Z])*)\b/
       ];
@@ -587,7 +576,7 @@ Format: ANSWER: [letter(s) only - e.g., "B" or "A,C,D"]`;
       .map(l => l.charCodeAt(0) - 65)
       .filter(i => i >= 0 && i < answerChoices.length);
     
-    // Validation
+    // Strict validation
     if (inputType === 'radio' && correctIndices.length > 1) {
       console.log(`⚠️ Radio button but got ${correctIndices.length} answers - using first only`);
       return [correctIndices[0]];
@@ -595,6 +584,13 @@ Format: ANSWER: [letter(s) only - e.g., "B" or "A,C,D"]`;
     
     if (expectedCount > 0 && correctIndices.length !== expectedCount) {
       console.log(`⚠️ Expected ${expectedCount} answers but got ${correctIndices.length}`);
+      // If GPT gave wrong count for a specific-count question, this might indicate uncertainty
+      // But we'll still use what it gave us
+    }
+    
+    if (correctIndices.length === 0) {
+      console.error('❌ No valid answer indices extracted');
+      return null;
     }
     
     return correctIndices;
@@ -605,7 +601,7 @@ Format: ANSWER: [letter(s) only - e.g., "B" or "A,C,D"]`;
   }
 }
 
-// Retry wrapper
+// Retry wrapper with better backoff
 async function getAnswerWithRetry(question, answerChoices, inputType, expectedCount, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
@@ -614,8 +610,8 @@ async function getAnswerWithRetry(question, answerChoices, inputType, expectedCo
         return result;
       }
       if (i < retries) {
-        console.log(`⚠️ Attempt ${i + 1} failed, retrying...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log(`⚠️ Attempt ${i + 1} failed or returned no answer, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
       }
     } catch (error) {
       console.error(`❌ Attempt ${i + 1} error:`, error);
@@ -635,9 +631,8 @@ function highlightAnswer(element, isCorrect = true) {
     targetElement = label || element.parentElement;
   }
   
-  targetElement.classList.remove('quiz-helper-correct', 'quiz-helper-unknown');
-  const className = isCorrect ? 'quiz-helper-correct' : 'quiz-helper-unknown';
-  targetElement.classList.add(className);
+  targetElement.classList.remove('quiz-helper-correct');
+  targetElement.classList.add('quiz-helper-correct');
   targetElement.setAttribute('data-quiz-helper-highlight', 'true');
 }
 
@@ -645,7 +640,7 @@ function highlightAnswer(element, isCorrect = true) {
 function removeHighlights() {
   const highlighted = document.querySelectorAll('[data-quiz-helper-highlight="true"]');
   highlighted.forEach(el => {
-    el.classList.remove('quiz-helper-correct', 'quiz-helper-unknown');
+    el.classList.remove('quiz-helper-correct');
     el.removeAttribute('data-quiz-helper-highlight');
   });
   console.log(`Removed ${highlighted.length} highlights`);
@@ -659,7 +654,8 @@ async function scanAndHighlight() {
   }
   
   isProcessing = true;
-  console.log('🚀 Starting enhanced Microsoft Learn scan...');
+  console.log('🚀 Starting enhanced scan with GPT-4o...');
+  console.log('📊 Improvements: Lower temperature, enhanced Azure knowledge, better answer extraction');
   
   try {
     const questions = findQuestions();
@@ -707,15 +703,11 @@ async function scanAndHighlight() {
           }
         });
       } else {
-        console.log('❌ AI could not determine answer - marking all RED');
-        answerChoices.forEach(choice => {
-          try {
-            highlightAnswer(choice.element, false);
-          } catch (e) {}
-        });
+        console.log('⚠️ AI could not determine answer - no highlighting applied');
       }
       
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Slightly longer delay to avoid rate limits and allow for higher quality responses
+      await new Promise(resolve => setTimeout(resolve, 3500));
     }
     
     console.log('\n✅ Scan complete!');

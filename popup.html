@@ -144,7 +144,7 @@
     <div id="apiStatus" class="api-status" style="display: none;"></div>
     <div class="info">
       Get a free API key at <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a>. 
-      New accounts get $5 in free credits. Cost per question: ~$0.001 (1/10th of a cent).
+      New accounts get $5 in free credits. Cost per question: ~$0.002 with GPT-4o.
     </div>
   </div>
   
@@ -159,12 +159,10 @@
   <div id="status"></div>
   
   <div class="info">
-    When enabled, ChatGPT will analyze quiz questions and highlight answers:
-    <ul style="margin: 5px 0; padding-left: 20px; font-size: 11px;">
-      <li><strong style="color: #28a745;">Green</strong> = ChatGPT identified correct answer(s)</li>
-      <li><strong style="color: #dc3545;">Red</strong> = ChatGPT failed, you need to guess</li>
-    </ul>
-    Check the browser console (F12) for detailed logs.
+    When enabled, GPT-4o will analyze quiz questions and highlight correct answers in <strong style="color: #28a745;">green</strong>. 
+    Questions without highlighting mean the AI couldn't determine the answer with confidence.
+    <br><br>
+    Check the browser console (F12) for detailed logs and reasoning.
   </div>
   
   <script src="popup.js"></script>
