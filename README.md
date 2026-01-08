@@ -6,6 +6,7 @@ An intelligent Chrome extension that uses ChatGPT to help you with online quizze
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![AI Powered](https://img.shields.io/badge/AI-ChatGPT-orange)
 
+![Screenshot](screenshot.jpg)
 ## ✨ Features
 
 - 🤖 **AI-Powered**: Uses ChatGPT (GPT-3.5-turbo) for intelligent answer analysis
