@@ -45,7 +45,7 @@ An intelligent Chrome extension that uses ChatGPT to help you with online quizze
 1. **Navigate to a quiz** (works best with Microsoft Learn practice assessments)
 2. **Click the extension icon** in your toolbar
 3. **Toggle the switch to "On"**
-4. **Wait a moment** - Correct answer(s) will be marked in green
+4. **Refresh Page** - Correct answer(s) will be marked in green after a brief moment
 5. **Select your answers** based on the hints
 6. **Toggle off** when done to remove hints
 
