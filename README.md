@@ -122,7 +122,7 @@ This extension is designed for learning and study purposes. Use responsibly and 
 
 **API errors:**
 - Verify your API key is correct (starts with `sk-`)
-- Check you have credits in your OpenAI account
+- Ensure you have credits in your OpenAI account
 - Look for rate limit messages in console
 
 ## 🤝 Contributing
