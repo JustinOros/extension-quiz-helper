@@ -60,6 +60,47 @@ document.getElementById('toggleSwitch').addEventListener('change', function(e) {
   }, 2000);
 });
 
+// Handle Retry button click
+document.getElementById('retryBtn').addEventListener('click', function() {
+  const btn = document.getElementById('retryBtn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  
+  chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+    if (tabs[0]) {
+      const url = tabs[0].url;
+      
+      if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://')) {
+        document.getElementById('status').textContent = 'Extension cannot run on this page';
+        document.getElementById('status').style.color = '#d13438';
+        btn.disabled = false;
+        btn.textContent = 'Retry Scan';
+        setTimeout(() => {
+          document.getElementById('status').textContent = '';
+          document.getElementById('status').style.color = '';
+        }, 3000);
+        return;
+      }
+      
+      chrome.tabs.sendMessage(tabs[0].id, {
+        action: 'retryScan'
+      }).then(() => {
+        window.close();
+      }).catch(error => {
+        console.log('Could not send retry message:', error);
+        document.getElementById('status').textContent = 'Could not initiate scan - refresh the page';
+        document.getElementById('status').style.color = '#d13438';
+        btn.disabled = false;
+        btn.textContent = 'Retry Scan';
+        setTimeout(() => {
+          document.getElementById('status').textContent = '';
+          document.getElementById('status').style.color = '';
+        }, 3000);
+      });
+    }
+  });
+});
+
 // Handle API key save
 document.getElementById('saveApiKey').addEventListener('click', function() {
   const apiKey = document.getElementById('apiKey').value.trim();

@@ -66,6 +66,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     openaiApiKey = request.apiKey;
     console.log('✓ OpenAI API key updated');
     processedQuestions.clear();
+  } else if (request.action === 'retryScan') {
+    console.log('🔄 Manual retry initiated from popup');
+    processedQuestions.clear();
+    isProcessing = false;
+    removeHighlights();
+    waitForContentAndScan();
   }
 });
 
@@ -168,7 +174,7 @@ function getFullQuestionContext(questionElement) {
   return questionText;
 }
 
-// Enhanced question finding for Microsoft Learn
+// Enhanced question finding for Microsoft Learn - Groups multi-line questions
 function findQuestions() {
   const questions = [];
   const seenTexts = new Set();
@@ -216,6 +222,8 @@ function findQuestions() {
       
       if (questionText.length < 15 || seenTexts.has(questionText)) return;
       if (/^(next|previous|submit|skip)$/i.test(questionText)) return;
+      // Skip page metadata, scripts, and non-question content
+      if (/var\s+\w+\s*=\s*\{|function\s*\(|microsoft learn|practice assessment/i.test(questionText)) return;
       
       seenTexts.add(questionText);
       questions.push({
@@ -718,7 +726,7 @@ async function scanAndHighlight() {
   }
 }
 
-// Mutation observer for dynamic content
+// Mutation observer for dynamic content - ignores self-triggered changes
 let mutationTimeout;
 const observer = new MutationObserver((mutations) => {
   if (!extensionEnabled || isProcessing) return;
@@ -726,7 +734,10 @@ const observer = new MutationObserver((mutations) => {
   const hasNewContent = mutations.some(mutation => {
     return mutation.addedNodes.length > 0 && 
            Array.from(mutation.addedNodes).some(node => 
-             node.nodeType === 1 && node.textContent.length > 50
+             node.nodeType === 1 && 
+             node.textContent.length > 50 &&
+             !node.classList?.contains('quiz-helper-correct') &&
+             !node.hasAttribute?.('data-quiz-helper-highlight')
            );
   });
   
@@ -742,4 +753,40 @@ const observer = new MutationObserver((mutations) => {
 observer.observe(document.body, {
   childList: true,
   subtree: true
+});
+
+// Listen for page navigation (Next button clicks)
+let lastUrl = location.href;
+const urlObserver = new MutationObserver(() => {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    console.log('🔄 Page navigation detected, resetting and rescanning...');
+    processedQuestions.clear();
+    isProcessing = false;
+    setTimeout(() => waitForContentAndScan(), 1000);
+  }
+});
+
+urlObserver.observe(document.body, { childList: true, subtree: true });
+
+// Also listen for popstate (browser back/forward)
+window.addEventListener('popstate', () => {
+  console.log('🔄 Browser navigation detected, resetting and rescanning...');
+  processedQuestions.clear();
+  isProcessing = false;
+  setTimeout(() => waitForContentAndScan(), 1000);
+});
+
+// Listen for Next button clicks
+document.addEventListener('click', (e) => {
+  const target = e.target;
+  if (target.tagName === 'SPAN' && target.textContent.trim() === 'Next') {
+    console.log('🔄 Next button clicked, scanning in 1 second...');
+    setTimeout(() => {
+      processedQuestions.clear();
+      isProcessing = false;
+      removeHighlights();
+      waitForContentAndScan();
+    }, 1000);
+  }
 });

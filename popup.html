@@ -127,6 +127,22 @@
       display: block;
       margin-bottom: 5px;
     }
+    .retry-btn {
+      padding: 6px 12px;
+      font-size: 11px;
+      background: #28a745;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .retry-btn:hover {
+      background: #218838;
+    }
+    .retry-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
@@ -154,6 +170,7 @@
       <span class="slider"></span>
     </label>
     <span id="toggleLabel">Off</span>
+    <button id="retryBtn" class="retry-btn">Retry Scan</button>
   </div>
   
   <div id="status"></div>
