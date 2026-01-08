@@ -82,79 +82,167 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Wait for dynamic content to load before scanning
+// Wait for dynamic content to load - ENHANCED for Microsoft Learn
 function waitForContentAndScan() {
-  console.log('Waiting for quiz content to load...');
+  console.log('🔍 Waiting for Microsoft Learn quiz content to load...');
   
   let attempts = 0;
-  const maxAttempts = 40;
+  const maxAttempts = 60; // Increased for slower loading
   
   const checkContent = setInterval(() => {
     attempts++;
     
-    const hasContent = document.body.innerText.length > 500;
-    const hasInteractiveElements = document.querySelectorAll('button, input, label').length > 5;
-    const mainContent = document.querySelector('[data-main-column]');
-    const hasMainContent = mainContent && mainContent.innerText.length > 100;
+    // Microsoft Learn specific selectors
+    const mainColumn = document.querySelector('[data-main-column]');
+    const hasMainContent = mainColumn && mainColumn.innerText.length > 100;
+    
+    // Look for Microsoft Learn quiz elements
     const hasQuizElements = document.querySelectorAll('input[type="radio"], input[type="checkbox"]').length > 0;
+    const hasQuestionText = document.body.innerText.length > 500;
     
-    console.log(`Attempt ${attempts}: content=${hasContent}, interactive=${hasInteractiveElements}, main=${hasMainContent}, quiz=${hasQuizElements}`);
+    // Look for common Microsoft Learn assessment structures
+    const hasAssessmentContainer = document.querySelector('[class*="assessment"], [class*="question"], [role="group"]');
+    const hasInteractiveElements = document.querySelectorAll('button, input, label').length > 5;
     
-    if ((hasContent && hasInteractiveElements && hasMainContent) || hasQuizElements) {
+    // Check for React root (Microsoft Learn uses React)
+    const reactRoot = document.querySelector('#root, [data-reactroot], [data-react-app]');
+    const hasReactContent = reactRoot && reactRoot.innerText.length > 200;
+    
+    const contentLoaded = (hasMainContent && hasQuizElements) || 
+                         (hasQuestionText && hasQuizElements) ||
+                         (hasReactContent && hasQuizElements);
+    
+    console.log(`Attempt ${attempts}/${maxAttempts}: main=${hasMainContent}, quiz=${hasQuizElements}, assessment=${!!hasAssessmentContainer}, react=${hasReactContent}`);
+    
+    if (contentLoaded) {
       clearInterval(checkContent);
-      console.log('✓ Quiz content detected! Starting scan in 2 seconds...');
-      setTimeout(() => scanAndHighlight(), 2000);
+      console.log('✅ Microsoft Learn quiz content detected! Starting scan in 3 seconds...');
+      setTimeout(() => scanAndHighlight(), 3000);
     } else if (attempts >= maxAttempts) {
       clearInterval(checkContent);
-      console.log('✗ Timeout: Quiz content did not load. Try refreshing the page.');
+      console.log('⚠️ Timeout: Quiz content did not load within expected time.');
+      console.log('💡 Try: 1) Refresh the page, 2) Wait for quiz to fully load, 3) Click "Start" if needed');
     }
   }, 500);
 }
 
-// Function to identify potential questions
+// Function to get full question context including scenario descriptions
+function getFullQuestionContext(questionElement) {
+  let fullText = questionElement.textContent.trim();
+  
+  // Check previous siblings for context (scenario descriptions, requirements)
+  let prevSibling = questionElement.previousElementSibling;
+  let attempts = 0;
+  const contextParts = [];
+  
+  while (prevSibling && attempts < 5) {
+    const text = prevSibling.textContent.trim();
+    
+    // If it's a substantial paragraph that adds context
+    if (text.length > 30 && text.length < 2000 && !text.match(/question \d+|^\d+\s*of\s*\d+/i)) {
+      // Check if it looks like contextual information
+      const hasContextKeywords = /scenario|requirement|company|organization|need|must|should|environment|architecture|implement|deploy|configure|planning|contoso|fabrikam|adatum/i.test(text);
+      
+      if (hasContextKeywords || text.length > 100) {
+        contextParts.unshift(text);
+      }
+    }
+    
+    prevSibling = prevSibling.previousElementSibling;
+    attempts++;
+  }
+  
+  // Also check parent containers for context
+  let parent = questionElement.parentElement;
+  attempts = 0;
+  while (parent && attempts < 3) {
+    const parentText = parent.textContent.trim();
+    if (parentText.length > fullText.length + 50 && parentText.length < 3000) {
+      // This parent might have additional context
+      const extraContext = parentText.replace(fullText, '').trim();
+      if (extraContext.length > 50 && /scenario|requirement|company|organization/i.test(extraContext)) {
+        contextParts.unshift(extraContext.substring(0, 500));
+        break;
+      }
+    }
+    parent = parent.parentElement;
+    attempts++;
+  }
+  
+  if (contextParts.length > 0) {
+    fullText = contextParts.join('\n\n') + '\n\n' + fullText;
+    console.log('📋 Added context from surrounding elements');
+  }
+  
+  return fullText;
+}
+
+// Enhanced question finding for Microsoft Learn
 function findQuestions() {
   const questions = [];
   const seenTexts = new Set();
   
-  console.log('DEBUG: Total body text length:', document.body.innerText.length);
-  console.log('DEBUG: Sample text:', document.body.innerText.substring(0, 500));
+  console.log('🔍 Scanning page structure...');
+  console.log('   Total page text length:', document.body.innerText.length);
   
-  const selectors = [
+  // Microsoft Learn specific selectors (prioritized)
+  const microsoftLearnSelectors = [
     '[role="group"]',
-    '[class*="question"]',
-    '[class*="quiz"]',
     '[class*="assessment"]',
+    '[class*="question"]',
     '[data-test*="question"]',
     'fieldset',
+    'form'
+  ];
+  
+  // Generic selectors as fallback
+  const genericSelectors = [
     'h1, h2, h3, h4, h5, h6',
     'p',
     'div[class*="text"]',
+    'div[class*="content"]',
     'div',
     'span',
     'label'
   ];
   
+  const allSelectors = [...microsoftLearnSelectors, ...genericSelectors];
+  
   const questionPatterns = [
-    /\?$/,
-    /\?/,
-    /^(what|when|where|who|why|how|which|is|are|does|do|did|can|could|would|should|will|shall)/i,
-    /\d+\.\s*[A-Z]/,
-    /^(true|false)/i,
+    /\?$/,                                    // Ends with question mark
+    /\?\s*$/,                                 // Ends with question mark and whitespace
+    /^(what|when|where|who|why|how|which|is|are|does|do|did|can|could|would|should|will|shall|must)/i,
+    /you need to/i,
+    /which of the following/i,
+    /select.*correct/i,
+    /choose.*answer/i,
     /characteristics/i,
-    /deployment model/i
+    /deployment model/i,
+    /recommend/i,
+    /solution/i,
+    /ensure that/i,
+    /minimize/i,
+    /configure/i,
+    /implement/i
   ];
   
-  selectors.forEach(selector => {
+  allSelectors.forEach(selector => {
     const elements = document.querySelectorAll(selector);
-    console.log(`DEBUG: Found ${elements.length} elements for selector "${selector}"`);
     
     elements.forEach(el => {
       const text = el.textContent.trim();
       
-      if (text.length < 10 || text.length > 1000 || seenTexts.has(text)) {
+      // Skip very short or very long text, or duplicates
+      if (text.length < 15 || text.length > 1500 || seenTexts.has(text)) {
         return;
       }
       
+      // Skip elements that are likely navigation or UI
+      if (/^(next|previous|submit|skip|back|continue|finish|review|question \d+ of \d+)$/i.test(text)) {
+        return;
+      }
+      
+      // Check against question patterns
       for (const pattern of questionPatterns) {
         if (pattern.test(text)) {
           seenTexts.add(text);
@@ -162,53 +250,67 @@ function findQuestions() {
             text: text,
             element: el
           });
-          console.log('Found question:', text.substring(0, 100));
+          console.log('✓ Found question:', text.substring(0, 120) + '...');
           break;
         }
       }
     });
   });
   
+  // Debug logging if no questions found
   if (questions.length === 0) {
-    console.log('DEBUG: No questions found. Logging first 10 p elements:');
-    const pElements = document.querySelectorAll('p');
-    Array.from(pElements).slice(0, 10).forEach((el, i) => {
-      console.log(`  p[${i}]:`, el.textContent.substring(0, 100));
-    });
+    console.log('⚠️ No questions detected. Debugging page structure...');
+    console.log('   Main column:', document.querySelector('[data-main-column]')?.innerText.substring(0, 200));
+    console.log('   Input elements:', document.querySelectorAll('input').length);
+    console.log('   Radio/Checkbox:', document.querySelectorAll('input[type="radio"], input[type="checkbox"]').length);
     
-    console.log('DEBUG: Logging first 10 divs with text:');
-    const divs = document.querySelectorAll('div');
-    let count = 0;
-    for (const div of divs) {
-      const text = div.textContent.trim();
-      if (text.length > 20 && text.length < 200) {
-        console.log(`  div[${count}]:`, text.substring(0, 100));
-        count++;
-        if (count >= 10) break;
-      }
-    }
+    const allText = document.body.innerText;
+    const lines = allText.split('\n').filter(l => l.trim().length > 20);
+    console.log('   First 10 substantial text lines:');
+    lines.slice(0, 10).forEach((line, i) => {
+      console.log(`     ${i + 1}. ${line.substring(0, 100)}`);
+    });
   }
   
   return questions;
 }
 
-// Function to find potential answer choices
+// Enhanced answer choice finding for Microsoft Learn
 function findAnswerChoices(questionElement) {
   const answers = [];
   const seenTexts = new Set();
-  let inputType = null; // 'radio' or 'checkbox'
+  let inputType = null;
   
-  let container = questionElement.closest('[role="group"], fieldset, form, [class*="question"], div[class*="options"]');
-  if (!container) {
+  // Start with the question element's container
+  let container = questionElement.closest('[role="group"], fieldset, form, [class*="question"], [class*="answer"], [class*="option"], div');
+  
+  // Expand search scope if needed
+  if (!container || container === questionElement) {
     container = questionElement.parentElement;
   }
   
-  for (let i = 0; i < 3 && container && answers.length === 0; i++) {
+  // Search up to 4 levels if we haven't found inputs yet
+  for (let i = 0; i < 4 && container; i++) {
+    const inputsInContainer = container.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+    if (inputsInContainer.length > 0) {
+      console.log(`   Found ${inputsInContainer.length} inputs at level ${i}`);
+      break;
+    }
     container = container.parentElement;
-    if (!container) break;
   }
   
   if (!container) container = document.body;
+  
+  // Also check siblings
+  let nextSibling = questionElement.nextElementSibling;
+  let siblingAttempts = 0;
+  const siblingContainers = [container];
+  
+  while (nextSibling && siblingAttempts < 8) {
+    siblingContainers.push(nextSibling);
+    nextSibling = nextSibling.nextElementSibling;
+    siblingAttempts++;
+  }
   
   const answerSelectors = [
     'input[type="radio"]',
@@ -228,131 +330,131 @@ function findAnswerChoices(questionElement) {
   const excludePatterns = [
     /^question\s+\d+\s+of\s+\d+$/i,
     /^page\s+\d+/i,
-    /^next$/i,
-    /^previous$/i,
-    /^submit$/i,
-    /^skip$/i,
-    /^back$/i,
-    /^continue$/i,
-    /^finish$/i,
-    /^review$/i,
+    /^(next|previous|submit|skip|back|continue|finish|review)$/i,
     /^\d+\s*\/\s*\d+$/,
     /^score:/i,
     /^time:/i,
-    /^remaining:/i
+    /^remaining:/i,
+    /^points?:/i
   ];
   
-  answerSelectors.forEach(selector => {
-    const elements = container.querySelectorAll(selector);
-    
-    elements.forEach(el => {
-      let text = el.textContent.trim();
+  siblingContainers.forEach(searchContainer => {
+    answerSelectors.forEach(selector => {
+      const elements = searchContainer.querySelectorAll(selector);
       
-      // Detect input type from actual input elements
-      if (el.tagName === 'INPUT') {
-        if (el.type === 'radio') {
-          inputType = 'radio';
-        } else if (el.type === 'checkbox') {
-          inputType = 'checkbox';
-        }
+      elements.forEach(el => {
+        let text = el.textContent.trim();
         
-        const label = container.querySelector(`label[for="${el.id}"]`);
-        if (label) {
-          text = label.textContent.trim();
-        } else {
-          const parentLabel = el.closest('label');
-          if (parentLabel) {
-            text = parentLabel.textContent.trim();
+        // Handle input elements specially
+        if (el.tagName === 'INPUT') {
+          if (el.type === 'radio') {
+            inputType = 'radio';
+          } else if (el.type === 'checkbox') {
+            inputType = 'checkbox';
+          }
+          
+          // Find associated label
+          const label = searchContainer.querySelector(`label[for="${el.id}"]`);
+          if (label) {
+            text = label.textContent.trim();
+          } else {
+            const parentLabel = el.closest('label');
+            if (parentLabel) {
+              text = parentLabel.textContent.trim();
+            } else {
+              // Try to find text near the input
+              const parent = el.parentElement;
+              if (parent) {
+                text = parent.textContent.trim();
+              }
+            }
           }
         }
-      }
-      
-      if (!text || text.length < 2 || text.length > 300 || seenTexts.has(text)) {
-        return;
-      }
-      
-      if (excludePatterns.some(pattern => pattern.test(text))) {
-        console.log(`Excluding UI element: "${text}"`);
-        return;
-      }
-      
-      const wordCount = text.split(/\s+/).length;
-      const numberCount = (text.match(/\d+/g) || []).length;
-      if (numberCount > wordCount / 2) {
-        console.log(`Excluding numeric element: "${text}"`);
-        return;
-      }
-      
-      seenTexts.add(text);
-      answers.push({
-        text: text,
-        element: el,
-        parentLabel: el.closest('label') || el
+        
+        // Validation checks
+        if (!text || text.length < 2 || text.length > 800 || seenTexts.has(text)) {
+          return;
+        }
+        
+        if (excludePatterns.some(pattern => pattern.test(text))) {
+          return;
+        }
+        
+        // Exclude if too many numbers (likely not answer text)
+        const wordCount = text.split(/\s+/).length;
+        const numberCount = (text.match(/\d+/g) || []).length;
+        if (wordCount > 2 && numberCount > wordCount / 2) {
+          return;
+        }
+        
+        seenTexts.add(text);
+        answers.push({
+          text: text,
+          element: el,
+          parentLabel: el.closest('label') || el
+        });
       });
     });
   });
   
-  console.log(`Found ${answers.length} answer choices (type: ${inputType || 'unknown'})`);
-  answers.forEach((a, i) => {
-    console.log(`   [${i}] "${a.text.substring(0, 50)}" - Element: ${a.element.tagName}.${a.element.className || 'no-class'}, ID: ${a.element.id || 'no-id'}`);
-  });
+  console.log(`   Found ${answers.length} answer choices (type: ${inputType || 'unknown'})`);
+  if (answers.length > 0) {
+    console.log('   Answer preview:');
+    answers.slice(0, 5).forEach((a, i) => {
+      console.log(`     ${String.fromCharCode(65 + i)}. ${a.text.substring(0, 60)}...`);
+    });
+  }
   
   return { answers, inputType };
 }
 
-// Function to determine expected number of answers from question text
+// Function to determine expected number of answers
 function getExpectedAnswerCount(questionText, inputType) {
   if (inputType === 'radio') {
-    return 1; // Radio buttons always mean single answer
+    return 1;
   }
   
-  // For checkboxes, try to find the expected count in the question
   const lowerQuestion = questionText.toLowerCase();
   
-  // Look for explicit numbers
   const numberWords = {
     'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
     'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
   };
   
-  // Check for patterns like "select two", "choose three", "two factors", etc.
   for (const [word, num] of Object.entries(numberWords)) {
     const patterns = [
-      new RegExp(`\\b${word}\\s+(answers?|options?|choices?|factors?|characteristics?|items?|reasons?|ways?|methods?|types?)\\b`, 'i'),
+      new RegExp(`\\b${word}\\s+(answers?|options?|choices?|factors?|characteristics?|items?|reasons?|ways?|methods?|types?|steps?|actions?|solutions?|components?|services?)\\b`, 'i'),
       new RegExp(`\\bselect\\s+${word}\\b`, 'i'),
       new RegExp(`\\bchoose\\s+${word}\\b`, 'i'),
       new RegExp(`\\bpick\\s+${word}\\b`, 'i'),
-      new RegExp(`\\bwhich\\s+${word}\\b`, 'i')
+      new RegExp(`\\bidentify\\s+${word}\\b`, 'i')
     ];
     
     for (const pattern of patterns) {
       if (pattern.test(lowerQuestion)) {
-        console.log(`📊 Detected ${num} expected answers from question text`);
+        console.log(`📊 Detected ${num} expected answers`);
         return num;
       }
     }
   }
   
-  // Check for digit numbers (e.g., "2 answers", "3 characteristics")
-  const digitMatch = lowerQuestion.match(/\b(\d+)\s+(answers?|options?|choices?|factors?|characteristics?|items?|reasons?|ways?|methods?|types?)\b/i);
+  const digitMatch = lowerQuestion.match(/\b(\d+)\s+(answers?|options?|choices?|factors?|characteristics?|items?|reasons?|ways?|methods?|types?|steps?|actions?|solutions?)\b/i);
   if (digitMatch) {
     const count = parseInt(digitMatch[1]);
-    console.log(`📊 Detected ${count} expected answers from question text`);
+    console.log(`📊 Detected ${count} expected answers`);
     return count;
   }
   
-  // Check for "Each correct answer" or "select all that apply" - means multiple but unknown count
   if (/each correct answer|select all that apply|all that apply|select all|choose all/i.test(lowerQuestion)) {
-    console.log(`📊 Detected "select all" question - expecting multiple answers`);
-    return -1; // Special value meaning "multiple, unknown count"
+    console.log(`📊 "Select all that apply" question`);
+    return -1;
   }
   
-  // Default for checkboxes: assume multiple but we don't know how many
-  console.log(`📊 Checkbox question with no specific count mentioned`);
+  console.log(`📊 Checkbox question (unknown count)`);
   return -1;
 }
 
-// Function to get answer using OpenAI
+// Enhanced OpenAI call with better prompting
 async function getAnswerFromOpenAI(question, answerChoices, inputType, expectedCount) {
   if (!openaiApiKey) {
     console.error('❌ No API key available');
@@ -360,35 +462,68 @@ async function getAnswerFromOpenAI(question, answerChoices, inputType, expectedC
   }
   
   try {
-    console.log('🤖 Asking ChatGPT...');
+    console.log('🤖 Querying GPT-4o...');
     
     const choicesText = answerChoices.map((c, i) => `${String.fromCharCode(65 + i)}. ${c.text}`).join('\n');
     
     let instructions = '';
     if (inputType === 'radio') {
-      instructions = '- This is a SINGLE-ANSWER question (radio buttons). Provide exactly ONE letter.';
+      instructions = `CRITICAL: This is a SINGLE-ANSWER question (radio buttons).
+- You MUST select EXACTLY ONE option
+- Even if multiple seem correct, choose the MOST correct one
+- Provide only ONE letter in your answer`;
     } else if (expectedCount > 0) {
-      instructions = `- This is a MULTIPLE-ANSWER question (checkboxes). Provide exactly ${expectedCount} letter(s), separated by commas.`;
+      instructions = `CRITICAL: This is a MULTIPLE-ANSWER question requiring EXACTLY ${expectedCount} answer(s).
+- You MUST select EXACTLY ${expectedCount} option(s), no more, no less
+- Evaluate each option independently
+- Provide exactly ${expectedCount} letter(s) separated by commas`;
     } else if (expectedCount === -1) {
-      instructions = '- This is a MULTIPLE-ANSWER question (checkboxes). Provide ALL correct answers, separated by commas.';
-    } else {
-      instructions = '- Determine if this requires one or multiple answers based on the question wording.';
+      instructions = `CRITICAL: This is a "SELECT ALL THAT APPLY" question.
+- Carefully evaluate EACH option independently
+- Include ALL options that are correct (commonly 2-4 options)
+- It's better to include a correct answer than to miss one
+- Provide all correct letters separated by commas`;
     }
     
-    const prompt = `You are helping with a Microsoft Azure certification exam. Answer the following multiple-choice question by selecting the correct answer(s).
+    const systemPrompt = `You are a Microsoft Azure certification expert with deep knowledge of:
+- Azure core services (Compute, Storage, Networking, Databases)
+- Azure identity and access management (Entra ID, RBAC)
+- Azure governance and compliance (Policy, Blueprints, Cost Management)
+- Azure security (Security Center, Sentinel, Key Vault)
+- Azure monitoring (Monitor, Log Analytics, Application Insights)
+- Azure architecture patterns and best practices
+- Real-world Azure implementation and troubleshooting
 
-Question: ${question}
+Your expertise comes from years of hands-on Azure experience and Microsoft certification training.
 
-Answer choices:
+When answering:
+1. Consider Microsoft's official recommendations and best practices
+2. Think about the Azure Well-Architected Framework (cost, security, reliability, performance, operations)
+3. For scenario questions, identify key requirements, constraints, and priorities
+4. Choose the MOST Azure-native and recommended solution
+5. If multiple answers seem viable, pick the one Microsoft would recommend in their official docs
+
+Example:
+Q: Which Azure service provides serverless compute?
+Options: A. Azure Virtual Machines B. Azure Functions C. Azure App Service D. Azure Batch
+Analysis: Looking for serverless - Azure Functions is the correct answer as it's fully serverless (no VM management)
+Answer: B`;
+
+    const userPrompt = `Question:
+${question}
+
+Options:
 ${choicesText}
 
-Instructions:
 ${instructions}
-- Respond ONLY with the letter(s) of the correct answer(s) (e.g., "A" or "A,C,D")
-- Do not include any explanation, reasoning, or additional text
-- Do not include spaces after commas
 
-Correct answer(s):`;
+Think step-by-step:
+1. Identify what the question is really asking
+2. Consider Azure best practices and official guidance
+3. Evaluate each option against the requirements
+4. Choose the answer(s) that Microsoft would recommend
+
+Format: ANSWER: [letter(s) only - e.g., "B" or "A,C,D"]`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -397,216 +532,201 @@ Correct answer(s):`;
         'Authorization': `Bearer ${openaiApiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o',
         messages: [
-          {
-            role: 'system',
-            content: 'You are an expert on Microsoft Azure and cloud computing. You provide only the letter(s) of correct answers to multiple-choice questions, without any explanation.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
         ],
-        temperature: 0.1,
-        max_tokens: 20
+        temperature: 0.3,
+        max_tokens: 600
       })
     });
     
     if (!response.ok) {
       const error = await response.json();
       console.error('❌ OpenAI API error:', error);
-      if (error.error && error.error.message) {
-        console.error('Error message:', error.error.message);
-      }
       return null;
     }
     
     const data = await response.json();
-    const answer = data.choices[0].message.content.trim();
+    const fullResponse = data.choices[0].message.content.trim();
     
-    console.log('🤖 ChatGPT says:', answer);
+    console.log('🤖 GPT-4o response:', fullResponse.substring(0, 300));
+    
+    // Extract answer
+    let answer = null;
+    const answerMatch = fullResponse.match(/ANSWER:\s*([A-Z](?:,\s*[A-Z])*)/i);
+    if (answerMatch) {
+      answer = answerMatch[1];
+    } else {
+      // Fallback extraction
+      const patterns = [
+        /(?:correct|answer|select).*?:\s*([A-Z](?:,\s*[A-Z])*)/i,
+        /\b([A-Z](?:,\s*[A-Z])*)\s*$/,
+        /\b([A-Z](?:,\s*[A-Z])*)\b/
+      ];
+      
+      for (const pattern of patterns) {
+        const match = fullResponse.match(pattern);
+        if (match) {
+          answer = match[1];
+          break;
+        }
+      }
+    }
+    
+    if (!answer) {
+      console.error('❌ Could not extract answer from response');
+      return null;
+    }
+    
+    console.log('🎯 Extracted answer:', answer);
     
     const correctLetters = answer.replace(/\s/g, '').split(',').map(l => l.trim().toUpperCase());
-    const correctIndices = correctLetters.map(l => l.charCodeAt(0) - 65).filter(i => i >= 0 && i < answerChoices.length);
+    const correctIndices = correctLetters
+      .map(l => l.charCodeAt(0) - 65)
+      .filter(i => i >= 0 && i < answerChoices.length);
     
-    // Validate answer count for radio buttons
+    // Validation
     if (inputType === 'radio' && correctIndices.length > 1) {
-      console.log(`⚠️ Warning: Radio button question but got ${correctIndices.length} answers. Using only the first one.`);
+      console.log(`⚠️ Radio button but got ${correctIndices.length} answers - using first only`);
       return [correctIndices[0]];
     }
     
-    // Validate answer count for checkboxes with specific count
     if (expectedCount > 0 && correctIndices.length !== expectedCount) {
-      console.log(`⚠️ Warning: Expected ${expectedCount} answers but got ${correctIndices.length}`);
+      console.log(`⚠️ Expected ${expectedCount} answers but got ${correctIndices.length}`);
     }
     
     return correctIndices;
     
   } catch (error) {
-    console.error('❌ Error calling OpenAI:', error);
+    console.error('❌ OpenAI error:', error);
     return null;
   }
 }
 
-// Function to highlight matching answers
+// Retry wrapper
+async function getAnswerWithRetry(question, answerChoices, inputType, expectedCount, retries = 2) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const result = await getAnswerFromOpenAI(question, answerChoices, inputType, expectedCount);
+      if (result && result.length > 0) {
+        return result;
+      }
+      if (i < retries) {
+        console.log(`⚠️ Attempt ${i + 1} failed, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    } catch (error) {
+      console.error(`❌ Attempt ${i + 1} error:`, error);
+      if (i === retries) return null;
+      await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+    }
+  }
+  return null;
+}
+
+// Highlighting function
 function highlightAnswer(element, isCorrect = true) {
-  const colorType = isCorrect ? 'correct' : 'unknown';
-  console.log(`   🎨 Attempting to highlight as ${colorType}`);
-  console.log(`      Original element:`, element);
-  
   let targetElement = element;
   
   if (element.tagName === 'INPUT') {
-    console.log(`      Element is INPUT, looking for label...`);
     const label = document.querySelector(`label[for="${element.id}"]`) || element.closest('label');
-    if (label) {
-      targetElement = label;
-      console.log(`      Found label:`, label);
-    } else {
-      targetElement = element.parentElement;
-      console.log(`      No label found, using parent:`, targetElement);
-    }
+    targetElement = label || element.parentElement;
   }
   
-  // Remove any existing quiz helper classes
   targetElement.classList.remove('quiz-helper-correct', 'quiz-helper-unknown');
-  targetElement.removeAttribute('data-quiz-helper-highlight');
-  
-  // Add the appropriate class
   const className = isCorrect ? 'quiz-helper-correct' : 'quiz-helper-unknown';
   targetElement.classList.add(className);
   targetElement.setAttribute('data-quiz-helper-highlight', 'true');
-  targetElement.setAttribute('data-quiz-helper-type', colorType);
-  
-  console.log(`      ✓ Applied ${colorType} class to:`, targetElement.textContent.substring(0, 50));
-  console.log(`      Classes:`, targetElement.className);
 }
 
-// Function to remove all highlights
+// Remove highlights
 function removeHighlights() {
   const highlighted = document.querySelectorAll('[data-quiz-helper-highlight="true"]');
   highlighted.forEach(el => {
     el.classList.remove('quiz-helper-correct', 'quiz-helper-unknown');
     el.removeAttribute('data-quiz-helper-highlight');
-    el.removeAttribute('data-quiz-helper-type');
   });
   console.log(`Removed ${highlighted.length} highlights`);
 }
 
-// Main scanning function
+// Main scan function
 async function scanAndHighlight() {
-  if (isProcessing || !extensionEnabled) return;
-  
-  if (!openaiApiKey) {
-    console.error('❌ Cannot scan: No OpenAI API key. Please add one in the extension popup.');
+  if (isProcessing || !extensionEnabled || !openaiApiKey) {
+    if (!openaiApiKey) console.error('❌ No API key configured');
     return;
   }
   
   isProcessing = true;
-  console.log('Starting scan...');
+  console.log('🚀 Starting enhanced Microsoft Learn scan...');
   
   try {
     const questions = findQuestions();
-    console.log(`Found ${questions.length} potential questions`);
+    console.log(`📝 Found ${questions.length} questions`);
     
     if (questions.length === 0) {
-      console.log('No questions found. Page might still be loading or uses unsupported format.');
+      console.log('⚠️ No questions detected. Ensure quiz is loaded and try again.');
       isProcessing = false;
       return;
     }
     
-    const questionsToProcess = questions.slice(0, 10);
-    
-    for (const question of questionsToProcess) {
-      if (processedQuestions.has(question.text)) {
-        continue;
-      }
+    for (const question of questions.slice(0, 10)) {
+      if (processedQuestions.has(question.text)) continue;
       
       processedQuestions.add(question.text);
       
+      const fullQuestionText = getFullQuestionContext(question.element);
       const { answers: answerChoices, inputType } = findAnswerChoices(question.element);
       
       if (answerChoices.length === 0) {
-        console.log('No answer choices found for question');
+        console.log('⚠️ No answer choices found, skipping question');
         continue;
       }
       
-      const expectedCount = getExpectedAnswerCount(question.text, inputType);
+      const expectedCount = getExpectedAnswerCount(fullQuestionText, inputType);
       
-      console.log(`\n📝 Question: ${question.text.substring(0, 100)}...`);
-      console.log(`   Input type: ${inputType || 'unknown'}`);
-      console.log(`   Expected answers: ${expectedCount === -1 ? 'multiple (unknown count)' : expectedCount}`);
-      console.log(`   Answer choices (${answerChoices.length}):`);
-      answerChoices.forEach((c, i) => {
-        console.log(`   ${String.fromCharCode(65 + i)}. ${c.text.substring(0, 50)}`);
-      });
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`📝 QUESTION: ${question.text.substring(0, 150)}...`);
+      console.log(`   Type: ${inputType || 'unknown'} | Expected: ${expectedCount === -1 ? 'multiple' : expectedCount}`);
+      console.log(`   Choices: ${answerChoices.length}`);
       
-      const correctIndices = await getAnswerFromOpenAI(question.text, answerChoices, inputType, expectedCount);
+      const correctIndices = await getAnswerWithRetry(fullQuestionText, answerChoices, inputType, expectedCount);
       
       if (correctIndices && correctIndices.length > 0) {
-        console.log(`✅ ChatGPT identified ${correctIndices.length} correct answer(s):`);
+        console.log(`✅ AI Answer: ${correctIndices.map(i => String.fromCharCode(65 + i)).join(', ')}`);
         
-        let highlightedCount = 0;
         correctIndices.forEach(index => {
           if (index >= 0 && index < answerChoices.length) {
-            const choice = answerChoices[index];
-            console.log(`   ✓ ${String.fromCharCode(65 + index)}. ${choice.text}`);
-            console.log(`      Element type: ${choice.element.tagName}, class: ${choice.element.className}`);
-            
             try {
-              highlightAnswer(choice.element, true);
-              highlightedCount++;
-              console.log(`      ✓ Successfully highlighted`);
+              highlightAnswer(answerChoices[index].element, true);
+              console.log(`   ✓ Highlighted: ${answerChoices[index].text.substring(0, 60)}`);
             } catch (e) {
-              console.error(`      ❌ Failed to highlight:`, e);
+              console.error(`   ❌ Highlight failed:`, e);
             }
-          } else {
-            console.error(`   ❌ Invalid index ${index} (max: ${answerChoices.length - 1})`);
           }
         });
-        
-        if (highlightedCount === 0) {
-          console.error('⚠️ WARNING: ChatGPT provided answers but NONE were highlighted!');
-          console.log('⚠️ Falling back to RED highlighting (user must guess)');
-          answerChoices.forEach((choice, index) => {
-            console.log(`   ⚠️ ${String.fromCharCode(65 + index)}. ${choice.text} (HIGHLIGHT FAILED)`);
-            try {
-              highlightAnswer(choice.element, false);
-            } catch (e) {
-              console.error(`      ❌ Failed to highlight in red:`, e);
-            }
-          });
-        } else if (highlightedCount < correctIndices.length) {
-          console.warn(`⚠️ WARNING: Only ${highlightedCount} of ${correctIndices.length} answers were highlighted`);
-        }
-        
       } else {
-        console.log('❌ ChatGPT failed to provide an answer - highlighting all choices in RED');
-        console.log('⚠️ USER MUST GUESS - ChatGPT could not determine the correct answer');
-        // Highlight all answers in red to indicate user needs to make a guess
-        answerChoices.forEach((choice, index) => {
-          console.log(`   ⚠️ ${String.fromCharCode(65 + index)}. ${choice.text} (UNKNOWN)`);
+        console.log('❌ AI could not determine answer - marking all RED');
+        answerChoices.forEach(choice => {
           try {
             highlightAnswer(choice.element, false);
-          } catch (e) {
-            console.error(`      ❌ Failed to highlight:`, e);
-          }
+          } catch (e) {}
         });
       }
       
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
     
-    console.log('\n✅ Scan complete');
+    console.log('\n✅ Scan complete!');
   } catch (error) {
-    console.error('Error in scanAndHighlight:', error);
+    console.error('❌ Scan error:', error);
   } finally {
     isProcessing = false;
   }
 }
 
-// Watch for dynamic content changes
+// Mutation observer for dynamic content
 let mutationTimeout;
 const observer = new MutationObserver((mutations) => {
   if (!extensionEnabled || isProcessing) return;
@@ -621,7 +741,7 @@ const observer = new MutationObserver((mutations) => {
   if (hasNewContent) {
     clearTimeout(mutationTimeout);
     mutationTimeout = setTimeout(() => {
-      console.log('Content changed, rescanning...');
+      console.log('🔄 New content detected, rescanning...');
       scanAndHighlight();
     }, 2000);
   }
