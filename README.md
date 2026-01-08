@@ -10,7 +10,7 @@ This Chrome web browser extension uses AI to help you with online quizzes by hig
 ## ✨ Features
 
 - 🤖 **AI-Powered**: Uses ChatGPT (GPT-3.5-turbo) for intelligent answer analysis
-- 💡 **Smart Hints**: Highlights answers in green
+- 💡 **Smart Hints**: Highlights correct answers in green
 - 🎯 **Accurate**: ChatGPT sees actual answer text for better context
 - ⚡ **Auto-Detection**: Automatically detects single vs. multiple answer questions
 - 🔒 **Private**: All data stays between you and OpenAI
