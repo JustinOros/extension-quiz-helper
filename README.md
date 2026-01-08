@@ -1,6 +1,6 @@
 # 🎓 Quiz Helper - AI-Powered Quiz Assistant
 
-This Chrome web browser extension uses AI to help you with online quizzes by highlighting [somewhat] correct answers.
+A web browser extension for Chrome which uses AI to help with online quizzes by highlighting correct answers in green (It's correct 60% of the time, every time).
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
