@@ -45,7 +45,7 @@ This Chrome web browser extension uses AI to help you with online quizzes by hig
 1. **Navigate to a quiz** (works best with Microsoft Learn practice assessments)
 2. **Click the extension icon** in your toolbar
 3. **Toggle the switch to "On"**
-4. **Refresh Page** - Correct answer(s) will be marked in green after a brief moment
+4. **Refresh Page** - Correct answer(s) will be highlighted in green after a brief moment
 5. **Select your answers** based on the hints
 6. **Toggle off** when done to remove hints
 
