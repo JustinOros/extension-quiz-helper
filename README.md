@@ -1,6 +1,6 @@
 # 🎓 Quiz Helper - AI-Powered Quiz Assistant
 
-A web browser extension for Chrome which uses AI to help with online quizzes by highlighting correct answers in green (It's correct 60% of the time, every time).
+A web browser extension for Chrome which uses AI to help with online quizzes by highlighting correct answers in green (Proof of Concept. ~80% Final Score Accuracy on Practice Assessments).
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -9,12 +9,11 @@ A web browser extension for Chrome which uses AI to help with online quizzes by 
 ![Screenshot](screenshot.jpg)
 ## ✨ Features
 
-- 🤖 **AI-Powered**: Uses ChatGPT (GPT-3.5-turbo) for intelligent answer analysis
+- 🤖 **AI-Powered**: Uses ChatGPT (GPT-4o) for intelligent answer analysis
 - 💡 **Smart Hints**: Highlights correct answers in green
 - 🎯 **Accurate**: ChatGPT sees actual answer text for better context
 - ⚡ **Auto-Detection**: Automatically detects single vs. multiple answer questions
 - 🔒 **Private**: All data stays between you and OpenAI
-- 💰 **Affordable**: ~$0.001 per question (100 questions ≈ $0.10-0.20)
 
 ## 📋 Requirements
 
@@ -125,4 +124,4 @@ Contributions are welcome! Feel free to:
 
 MIT License - feel free to use and modify as needed.
 
-**Made with ❤️  for students and learners everywhere**
+**Made with ❤️ for students and learners everywhere!**
