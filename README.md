@@ -32,7 +32,7 @@ A web browser extension for Chrome which uses AI to help with online quizzes by 
    - Open Chrome and navigate to `chrome://extensions/`
    - Enable "Developer mode" (toggle in top-right corner)
    - Click "Load unpacked"
-   - Select the `extension\unpacked` folder from the extracted files
+   - Select the `extension/unpacked` folder from the extracted files
 
 3. **Add API Key**:
    - Click the extension icon in your toolbar
