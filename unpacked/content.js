@@ -501,6 +501,13 @@ FORMAT: Always respond with "ANSWER: " followed by the LETTER(s) of the correct 
     if (!response.ok) {
       const error = await response.json();
       console.error('❌ OpenAI API error:', error);
+      
+      // Check for rate limit error (status 429 or error code)
+      if (response.status === 429 || error?.error?.type === 'rate_limit_exceeded' || error?.error?.code === 'rate_limit_exceeded') {
+        console.log('⚠️ Rate limit detected, will retry with backoff');
+        return 'RATE_LIMITED';
+      }
+      
       return null;
     }
     
@@ -571,11 +578,19 @@ FORMAT: Always respond with "ANSWER: " followed by the LETTER(s) of the correct 
   }
 }
 
-// Retry wrapper with better backoff
-async function getAnswerWithRetry(question, answerChoices, inputType, expectedCount, retries = 2) {
+// Retry wrapper with exponential backoff for rate limits
+async function getAnswerWithRetry(question, answerChoices, inputType, expectedCount, retries = 5) {
   for (let i = 0; i <= retries; i++) {
     try {
       const result = await getAnswerFromOpenAI(question, answerChoices, inputType, expectedCount);
+      
+      if (result === 'RATE_LIMITED') {
+        const backoffMs = Math.min(1000 * Math.pow(2, i), 60000); // Max 60 seconds
+        console.log(`⏳ Rate limited. Waiting ${backoffMs / 1000}s before retry ${i + 1}/${retries}...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        continue;
+      }
+      
       if (result && result.length > 0) {
         return result;
       }
